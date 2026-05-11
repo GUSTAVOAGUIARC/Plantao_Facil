@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
-import AddAusenteModal from "../components/AddAusenteModal";
+import AddAusenteModal from "../../components/AddAusenteModal";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./FuncAusente.css";
+import { api } from '../../components/api/Api';
+import ConflitoModal from "../../components/ConflitoModal";
+import MotivoModal from "../../components/MotivoModal";
 
 const FuncionariosAusentes = () => {
     const [ausentes, setAusentes] = useState([]);
@@ -13,18 +16,18 @@ const FuncionariosAusentes = () => {
     const [funcSelecionado, setFuncSelecionado] = useState(null);
     const [loadingConflitos, setLoadingConflitos] = useState(false);
 
+    const [showMotivoModal, setShowMotivoModal] = useState(false);
+    const [motivoSelecionado, setMotivoSelecionado] = useState("");
+
     const [user, setUser] = useState(null);
 
     const fetchAusentes = async (dataSelecionada = "") => {
         try {
-            const url = dataSelecionada
-                ? `http://localhost:8000/ausentes/${dataSelecionada}`
-                : "http://localhost:8000/ausentes/";
+            const path = dataSelecionada
+                ? `/ausentes/${dataSelecionada}`
+                : "/ausentes/";
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("Erro ao buscar ausentes");
-
-            const data = await res.json();
+            const data = await api.get(path);
             setAusentes(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
@@ -49,11 +52,7 @@ const FuncionariosAusentes = () => {
         if (!window.confirm("Deseja realmente remover este ausente?")) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/ausentes/${cpf}`, {
-                method: "DELETE",
-            });
-
-            if (!res.ok) throw new Error("Erro ao excluir ausente");
+            await api.delete(`/ausentes/${cpf}`);
             await fetchAusentes(dataFiltro);
         } catch (err) {
             console.error(err);
@@ -75,12 +74,10 @@ const FuncionariosAusentes = () => {
         };
 
         if (!func.data_final) {
-            const res = await fetch(
-                `http://localhost:8000/escaladodia/${formatarDataURL(func.data)}`
-            );
-
-            if (res.ok) {
-                const data = await res.json();
+            try {
+                const data = await api.get(
+                    `/escaladodia/${formatarDataURL(func.data)}`
+                );
                 data.Escala?.forEach((e) => {
                     if (e.Nome === func.nome && e.Horario === func.horario) {
                         conflitos.push({
@@ -89,6 +86,8 @@ const FuncionariosAusentes = () => {
                         });
                     }
                 });
+            } catch {
+                
             }
             return conflitos;
         }
@@ -110,9 +109,8 @@ const FuncionariosAusentes = () => {
                 turnosParaVerificar = TURNOS;
             }
 
-            const res = await fetch(`http://localhost:8000/escaladodia/${dataURL}`);
-            if (res.ok) {
-                const data = await res.json();
+            try {
+                const data = await api.get(`/escaladodia/${dataURL}`);
 
                 for (const turno of turnosParaVerificar) {
                     const existe = data.Escala?.some(
@@ -133,6 +131,8 @@ const FuncionariosAusentes = () => {
                         });
                     }
                 }
+            } catch {
+                // sem escala nesse dia
             }
 
             atual.setDate(atual.getDate() + 1);
@@ -186,6 +186,7 @@ const FuncionariosAusentes = () => {
                             <th>Horário Inicial</th>
                             <th>Data Final</th>
                             <th>Horário Final</th>
+                            <th>Motivo</th>
                             <th>Conflitos</th>
                             {user?.cargo === "Coordenador" && <th>Ações</th>}
                         </tr>
@@ -200,7 +201,20 @@ const FuncionariosAusentes = () => {
                                 <td>{func.horario || "—"}</td>
                                 <td>{func.data_final || "—"}</td>
                                 <td>{func.horario_final || "—"}</td>
+                                <td>  
+                                    
+                                    <button
+                                        className="btn btn-sm btn-warning"
+                                        onClick={async () => {
+                                            setMotivoSelecionado(func.motivo);
+                                            setFuncSelecionado(func);
+                                            setShowMotivoModal(true);
+                                        }}
+                                    >
+                                        { "Ver Motivo"}
+                                    </button>   
 
+                                    </td>
                                 <td>
                                     <button
                                         className="btn btn-sm btn-warning"
@@ -213,7 +227,7 @@ const FuncionariosAusentes = () => {
                                             setShowConflitosModal(true);
                                         }}
                                     >
-                                        {loadingConflitos ? "..." : "Ver"}
+                                        {loadingConflitos ? "..." : "Ver Conflitos"}
                                     </button>
                                 </td>
 
@@ -233,62 +247,19 @@ const FuncionariosAusentes = () => {
                 </table>
             )}
 
-            {showConflitosModal && (
-                <>
-                    <div className="modal show fade d-block" tabIndex="-1">
-                        <div className="modal-dialog modal-dialog-centered modal-lg">
-                            <div className="modal-content">
+            <MotivoModal
+                show={showMotivoModal}
+                onClose={() => setShowMotivoModal(false)}
+                motivo={motivoSelecionado}
+                nome={funcSelecionado?.nome}
+            />
 
-                                <div className="modal-header">
-                                    <h5 className="modal-title">
-                                        ⚠️ Conflitos de Escala — {funcSelecionado?.nome}
-                                    </h5>
-                                    <button
-                                        className="btn-close"
-                                        onClick={() => setShowConflitosModal(false)}
-                                    />
-                                </div>
-
-                                <div className="modal-body">
-                                    {conflitos.length === 0 ? (
-                                        <div className="alert alert-success">
-                                            Nenhum conflito encontrado 🎉
-                                        </div>
-                                    ) : (
-                                        <table className="table table-bordered">
-                                            <thead>
-                                                <tr>
-                                                    <th>Data</th>
-                                                    <th>Turno</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {conflitos.map((c, i) => (
-                                                    <tr key={i}>
-                                                        <td>{c.data}</td>
-                                                        <td>{c.horario}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    )}
-                                </div>
-
-                                <div className="modal-footer">
-                                    <button
-                                        className="btn btn-secondary"
-                                        onClick={() => setShowConflitosModal(false)}
-                                    >
-                                        Fechar
-                                    </button>
-                                </div>
-
-                            </div>
-                        </div>
-                    </div>
-                    <div className="modal-backdrop fade show"></div>
-                </>
-            )}
+            <ConflitoModal
+                show={showConflitosModal}
+                onClose={() => setShowConflitosModal(false)}
+                conflitos={conflitos}
+                funcSelecionado={funcSelecionado}
+            />
 
             <AddAusenteModal
                 show={showModal}

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 from database import Base
 
 class Troca(Base):
@@ -13,3 +14,6 @@ class Troca(Base):
     horariodestinatario = Column(String(20), nullable=False)
     motivo = Column(String(500), nullable=True)
     situacao = Column(String(50), default="Pendente")
+    cpfSolicitante = Column(String(14),ForeignKey("users.cpf"), nullable=False)
+    cpfDestinatario = Column(String(14),ForeignKey("users.cpf"), nullable=False)
+    user = relationship("User", back_populates="trocas")
